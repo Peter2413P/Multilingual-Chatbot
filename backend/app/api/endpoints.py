@@ -293,6 +293,72 @@ async def remove_document(doc_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# --- Knowledge Graph Endpoints ---
+
+@router.get("/documents/{document_id}/graph")
+@router.get("/graph/document/{document_id}")
+async def get_document_graph(document_id: str):
+    try:
+        from app.services.kg_adapter import get_kg_adapter
+        adapter = get_kg_adapter()
+        graph_data = adapter.get_document_graph(document_id)
+        return graph_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch document graph: {str(e)}")
+
+@router.get("/graph/nodes/{node_id}")
+async def get_node_details(node_id: str):
+    try:
+        from app.services.kg_adapter import get_kg_adapter
+        adapter = get_kg_adapter()
+        details = adapter.get_node_details(node_id)
+        if not details:
+            raise HTTPException(status_code=404, detail=f"Knowledge node '{node_id}' not found")
+        return details
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch node details: {str(e)}")
+
+@router.get("/personas/{persona_id}/graph")
+async def get_persona_graph(persona_id: str):
+    try:
+        from app.db.session import SessionLocal
+        from app.db.models import KnowledgeSource, KnowledgeNode, KnowledgeEdge
+        db = SessionLocal()
+        try:
+            sources = db.query(KnowledgeSource).filter(KnowledgeSource.persona_id == persona_id).all()
+            source_ids = [s.id for s in sources]
+            
+            nodes = db.query(KnowledgeNode).filter(KnowledgeNode.document_id.in_(source_ids)).all() if source_ids else []
+            edges = db.query(KnowledgeEdge).filter(KnowledgeEdge.document_id.in_(source_ids)).all() if source_ids else []
+            
+            # Merge duplicate canonical nodes across persona documents
+            canonical_map = {}
+            for n in nodes:
+                c_name = n.canonical_name
+                if c_name not in canonical_map:
+                    canonical_map[c_name] = n.to_dict()
+                else:
+                    canonical_map[c_name]["frequency"] += n.frequency
+                    chunk_set = set(canonical_map[c_name]["source_chunk_ids"]) | set(n.source_chunk_ids)
+                    canonical_map[c_name]["source_chunk_ids"] = list(chunk_set)
+                    canonical_map[c_name]["chunk_ids"] = list(chunk_set)
+                    
+            return {
+                "persona_id": persona_id,
+                "document_count": len(source_ids),
+                "node_count": len(canonical_map),
+                "edge_count": len(edges),
+                "nodes": list(canonical_map.values()),
+                "edges": [e.to_dict() for e in edges],
+            }
+        finally:
+            db.close()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch persona graph: {str(e)}")
+
+
 # --- Voice Identity / Voice Cloning Endpoints ---
 
 @router.post("/personas/{persona_id}/voice/samples")

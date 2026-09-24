@@ -78,6 +78,13 @@ def ingest_tamil_document(file_path: str, filename: str, persona_id: str) -> str
             src.status = "COMPLETED"
             db.commit()
         db.close()
+
+        # 6. Generate Knowledge Graph via Adapter (Failure-Isolated)
+        try:
+            from app.services.kg_adapter import get_kg_adapter
+            get_kg_adapter().build_graph_for_document(source_id, all_docs, language="ta")
+        except Exception as kg_err:
+            print(f"[KG] Non-fatal Tamil graph generation warning: {kg_err}")
         
     except Exception as e:
         import traceback

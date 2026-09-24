@@ -38,6 +38,8 @@ class KnowledgeSource(Base):
     entity = relationship("Entity", back_populates="knowledge_sources")
     structured_records = relationship("StructuredRecord", back_populates="knowledge_source", cascade="all, delete-orphan")
     explicit_facts = relationship("ExplicitFact", back_populates="knowledge_source", cascade="all, delete-orphan")
+    knowledge_nodes = relationship("KnowledgeNode", back_populates="knowledge_source", cascade="all, delete-orphan")
+    knowledge_edges = relationship("KnowledgeEdge", back_populates="knowledge_source", cascade="all, delete-orphan")
 
 class Entity(Base):
     __tablename__ = "entities"
@@ -188,4 +190,124 @@ class VoiceSample(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     persona = relationship("Persona", back_populates="voice_samples")
+
+
+class KnowledgeNode(Base):
+    __tablename__ = "knowledge_nodes"
+
+    node_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    document_id = Column(
+        String,
+        ForeignKey("knowledge_sources.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name = Column(String(255), nullable=False)
+    canonical_name = Column(String(255), nullable=False, index=True)
+    original_name = Column(String(255), nullable=True)  # Tamil or native script
+    entity_type = Column(String(50), nullable=False, default="CONCEPT")
+    description = Column(Text, nullable=True)
+    source_chunk_ids_json = Column(Text, nullable=True, default="[]")  # JSON list of chunk IDs or dicts
+    frequency = Column(Integer, default=1, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    knowledge_source = relationship("KnowledgeSource", back_populates="knowledge_nodes")
+    outgoing_edges = relationship(
+        "KnowledgeEdge",
+        foreign_keys="KnowledgeEdge.source_node_id",
+        back_populates="source_node",
+        cascade="all, delete-orphan",
+    )
+    incoming_edges = relationship(
+        "KnowledgeEdge",
+        foreign_keys="KnowledgeEdge.target_node_id",
+        back_populates="target_node",
+        cascade="all, delete-orphan",
+    )
+
+    @property
+    def source_chunk_ids(self):
+        if not self.source_chunk_ids_json:
+            return []
+        try:
+            return json.loads(self.source_chunk_ids_json)
+        except Exception:
+            return []
+
+    @source_chunk_ids.setter
+    def source_chunk_ids(self, val):
+        self.source_chunk_ids_json = json.dumps(list(val) if isinstance(val, (list, set)) else val)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.node_id,
+            "node_id": self.node_id,
+            "document_id": self.document_id,
+            "name": self.name,
+            "label": self.name,
+            "canonical_name": self.canonical_name,
+            "original_name": self.original_name,
+            "type": self.entity_type,
+            "entity_type": self.entity_type,
+            "description": self.description or "",
+            "source_chunk_ids": self.source_chunk_ids,
+            "chunk_ids": self.source_chunk_ids,
+            "frequency": self.frequency,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class KnowledgeEdge(Base):
+    __tablename__ = "knowledge_edges"
+
+    edge_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    document_id = Column(
+        String,
+        ForeignKey("knowledge_sources.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_node_id = Column(
+        String(36),
+        ForeignKey("knowledge_nodes.node_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    target_node_id = Column(
+        String(36),
+        ForeignKey("knowledge_nodes.node_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    relation_type = Column(String(100), nullable=False, default="RELATED_TO")
+    description = Column(Text, nullable=True)
+    weight = Column(Float, default=1.0, nullable=False)
+    source_chunk_id = Column(String(36), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    knowledge_source = relationship("KnowledgeSource", back_populates="knowledge_edges")
+    source_node = relationship("KnowledgeNode", foreign_keys=[source_node_id], back_populates="outgoing_edges")
+    target_node = relationship("KnowledgeNode", foreign_keys=[target_node_id], back_populates="incoming_edges")
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.edge_id,
+            "edge_id": self.edge_id,
+            "document_id": self.document_id,
+            "source": self.source_node_id,
+            "target": self.target_node_id,
+            "source_node_id": self.source_node_id,
+            "target_node_id": self.target_node_id,
+            "relation": self.relation_type,
+            "relation_type": self.relation_type,
+            "label": self.relation_type.replace("_", " ").title(),
+            "description": self.description or "",
+            "weight": self.weight,
+            "source_chunk_id": self.source_chunk_id,
+            "chunk_id": self.source_chunk_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
 

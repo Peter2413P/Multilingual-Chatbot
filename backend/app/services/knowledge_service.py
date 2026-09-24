@@ -130,6 +130,13 @@ def process_knowledge_source(source_id: str, text_content: str, metadata: dict, 
         source_record.status = "COMPLETED"
         db.commit()
 
+        # 8. Generate Knowledge Graph via Adapter (Failure-Isolated)
+        try:
+            from app.services.kg_adapter import get_kg_adapter
+            get_kg_adapter().build_graph_for_document(source_id, docs, language="en")
+        except Exception as kg_err:
+            print(f"[KG] Non-fatal graph generation warning: {kg_err}")
+
     except Exception as e:
         import traceback
         traceback.print_exc()

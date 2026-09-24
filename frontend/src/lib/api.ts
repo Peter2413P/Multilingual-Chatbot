@@ -834,3 +834,127 @@ export async function updateF5TTSSettings(
     );
   }
 }
+
+/**
+ * Knowledge Graph Types & API
+ */
+export interface GraphNode {
+  id: string;
+  node_id: string;
+  document_id: string;
+  name: string;
+  label: string;
+  canonical_name: string;
+  original_name: string | null;
+  type: string;
+  entity_type: string;
+  description: string;
+  frequency: number;
+  source_chunk_ids: string[];
+  chunk_ids: string[];
+  x?: number;
+  y?: number;
+  vx?: number;
+  vy?: number;
+}
+
+export interface GraphEdge {
+  id: string;
+  edge_id: string;
+  document_id: string;
+  source: string | GraphNode;
+  target: string | GraphNode;
+  source_node_id: string;
+  target_node_id: string;
+  relation: string;
+  relation_type: string;
+  label: string;
+  description: string;
+  weight: number;
+  source_chunk_id: string | null;
+  chunk_id: string | null;
+}
+
+export interface DocumentGraphResponse {
+  document_id?: string;
+  persona_id?: string;
+  node_count: number;
+  edge_count: number;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface ConnectedRelation {
+  edge_id: string;
+  direction: "outgoing" | "incoming";
+  relation_type: string;
+  target_node_id?: string;
+  target_node_name?: string;
+  target_node_type?: string;
+  source_node_id?: string;
+  source_node_name?: string;
+  source_node_type?: string;
+  description: string | null;
+  weight: number;
+}
+
+export interface NodeSourceChunk {
+  chunk_id: string;
+  page_number: number;
+  chunk_index: number;
+  language: string | null;
+  original_text: string;
+  translated_text: string | null;
+  is_ocr: boolean;
+}
+
+export interface NodeDetailsResponse {
+  node: {
+    id: string;
+    node_id: string;
+    document_id: string;
+    name: string;
+    label: string;
+    canonical_name: string;
+    original_name: string | null;
+    type: string;
+    entity_type: string;
+    description: string;
+    summary?: string;
+    key_insights?: string[];
+    source_chunk_ids: string[];
+    frequency: number;
+    document_name?: string;
+  };
+  summary?: string;
+  key_insights?: string[];
+  connected_relations: ConnectedRelation[];
+  source_chunks: NodeSourceChunk[];
+}
+
+export async function getDocumentGraph(
+  documentId: string
+): Promise<DocumentGraphResponse> {
+  const res = await fetchWithTimeout(
+    `${API_URL}/documents/${encodeURIComponent(documentId)}/graph`
+  );
+  return handleResponse<DocumentGraphResponse>(res);
+}
+
+export async function getNodeDetails(
+  nodeId: string
+): Promise<NodeDetailsResponse> {
+  const res = await fetchWithTimeout(
+    `${API_URL}/graph/nodes/${encodeURIComponent(nodeId)}`
+  );
+  return handleResponse<NodeDetailsResponse>(res);
+}
+
+export async function getPersonaGraph(
+  personaId: string
+): Promise<DocumentGraphResponse> {
+  const res = await fetchWithTimeout(
+    `${API_URL}/personas/${encodeURIComponent(personaId)}/graph`
+  );
+  return handleResponse<DocumentGraphResponse>(res);
+}
